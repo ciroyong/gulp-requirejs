@@ -1,7 +1,7 @@
 module.exports = function(options) {
 	'use strict';
 
-	var requirejs, through;
+	var requirejs, through, gutil, cache;
 
 	requirejs = require("requirejs");
 	through = require("through2");
@@ -308,31 +308,13 @@ module.exports = function(options) {
 
 	});
 
-	through = through.obj(function(file, encoding, callback) {
-
+	return through.obj(function(file, encoding, callback) {
+		cache[file.path] = file;
+		callback();
 	}, function(callback) {
+		console.log(cache);
 		requirejs.optimize(options, function() {
 			callback()
 		}, function() {})
-	});
-
-	grunt.registerMultiTask('requirejs', 'Build a RequireJS project.', function() {
-		var done = this.async();
-		var options = this.options({
-			logLevel: grunt.option('verbose') ? LOG_LEVEL_TRACE : LOG_LEVEL_WARN,
-			done: function(done, response) {
-				done();
-			}
-		});
-		// The following catches errors in the user-defined `done` function and outputs them.
-		var tryCatch = function(fn, done, output) {
-			try {
-				fn(done, output);
-			} catch (e) {
-				grunt.fail.warn('There was an error while processing your done function: "' + e + '"');
-			}
-		};
-
-		requirejs.optimize(options, tryCatch.bind(null, options.done, done));
 	});
 };
