@@ -1,7 +1,7 @@
 module.exports = function(options) {
 	'use strict';
 
-	var requirejs, path, through, gutil, cache, isWindows, windowsDriveRegExp;
+	var requirejs, path, through, gutil, cache, isWindows, windowsDriveRegExp, op, hasOwn, hasProp;
 
 	isWindows = process.platform === 'win32';
 	windowsDriveRegExp = /^[a-zA-Z]\:\/$/;
@@ -9,25 +9,35 @@ module.exports = function(options) {
 	through = require("through2");
 	gutil = require("gulp-util");
 	path = require("path");
-	cache = [];
+	cache = {};
+	op = Object.prototype;
+    hasOwn = op.hasOwnProperty;
 
-	function frontSlash(path) {
-		return path.replace(/\\/g, '/');
+    function hasProp(obj, prop) {
+        return hasOwn.call(obj, prop);
+    }
+
+	function frontSlash(sPath) {
+		return sPath.replace(/\\/g, '/');
 	}
 
-	function exists(path) {
-		if (isWindows && path.charAt(path.length - 1) === '/' &&
-			path.charAt(path.length - 2) !== ':') {
-			path = path.substring(0, path.length - 1);
+	function exists(sPath) {
+		// if (isWindows && path.charAt(path.length - 1) === '/' &&
+		// 	path.charAt(path.length - 2) !== ':') {
+		// 	path = path.substring(0, path.length - 1);
+		// }
+
+		// try {
+		// 	fs.statSync(path);
+		// 	return true;
+		// } catch (e) {
+		// 	return false;
+		// }
+		if(sPath === frontSlash(path.normalize(options.baseUrl))) {
+			return true;
 		}
 
-		try {
-			fs.statSync(path);
-			return true;
-		} catch (e) {
-			return false;
-		}
-		// return cache.hasOwnProperty(path);
+		return hasProp(cache, sPath);
 	}
 
 	function mkDir(dir) {
@@ -53,16 +63,12 @@ module.exports = function(options) {
 	}
 
 	function start(file, encoding, callback) {
-		file.path = path.resolve(options.dir, file.relative);
+		file.path = path.resolve(options.baseUrl, file.relative);
 		cache[file.path] = file;
 		callback();
 	}
 
 	function end(callback) {
-		// console.log(cache);
-		// requirejs.require("node/file", function(file) {
-		// 	console.log(file.copyDir);
-		// });
 		requirejs.define("node/file", ["fs", "path", "prim"], function(fs, path, prim) {
 			return {
 				backSlashRegExp: /\\/g,
@@ -72,9 +78,7 @@ module.exports = function(options) {
 				},
 
 				exists: function(fileName) {
-					console.log("[exists] fileName: %s", fileName);
-					// return exists(fileName);
-					return true;
+					return exists(fileName);
 				},
 
 				parent: function(fileName) {
@@ -97,59 +101,42 @@ module.exports = function(options) {
 				},
 
 				isFile: function(path) {
-					return fs.statSync(path).isFile();
+					// return fs.statSync(path).isFile();
+					return cache[path].stat.isFile();
 				},
 
 				isDirectory: function(path) {
-					return fs.statSync(path).isDirectory();
+					return cache[path].stat.isDirectory();
 				},
 
 				getFilteredFileList: function( /*String*/ startDir, /*RegExp*/ regExpFilters, /*boolean?*/ makeUnixPaths) {
-					console.log("[getFilteredFileList] startDir: %s", startDir);
 					//summary: Recurses startDir and finds matches to the files that match regExpFilters.include
 					//and do not match regExpFilters.exclude. Or just one regexp can be passed in for regExpFilters,
 					//and it will be treated as the "include" case.
 					//Ignores files/directories that start with a period (.) unless exclusionRegExp
 					//is set to another value.
 					var files = [],
-						topDir, regExpInclude, regExpExclude, dirFileArray,
-						i, stat, filePath, ok, dirFiles, fileName;
-
-					topDir = startDir;
+						regExpInclude, regExpExclude,
+						ok, name;
 
 					regExpInclude = regExpFilters.include || regExpFilters;
 					regExpExclude = regExpFilters.exclude || null;
 
-					if (file.exists(topDir)) {
-						dirFileArray = fs.readdirSync(topDir);
-						for (i = 0; i < dirFileArray.length; i++) {
-							fileName = dirFileArray[i];
-							filePath = path.join(topDir, fileName);
-							stat = fs.statSync(filePath);
-							if (stat.isFile()) {
-								if (makeUnixPaths) {
-									//Make sure we have a JS string.
-									if (filePath.indexOf("/") === -1) {
-										filePath = frontSlash(filePath);
-									}
-								}
+					for(name in cache) {
+						if(cache[name].stat.isFile()) {
+							ok = true;
 
-								ok = true;
-								if (regExpInclude) {
-									ok = filePath.match(regExpInclude);
-								}
-								if (ok && regExpExclude) {
-									ok = !filePath.match(regExpExclude);
-								}
+							if (regExpInclude) {
+								ok = name.match(regExpInclude);
+							}
 
-								if (ok && (!file.exclusionRegExp ||
-										!file.exclusionRegExp.test(fileName))) {
-									files.push(filePath);
-								}
-							} else if (stat.isDirectory() &&
-								(!file.exclusionRegExp || !file.exclusionRegExp.test(fileName))) {
-								dirFiles = this.getFilteredFileList(filePath, regExpFilters, makeUnixPaths);
-								files.push.apply(files, dirFiles);
+							if (ok && regExpExclude) {
+								ok = !name.match(regExpExclude);
+							}
+
+							if (ok && (!this.exclusionRegExp ||
+									!this.exclusionRegExp.test(name))) {
+								files.push(name);
 							}
 						}
 					}
@@ -158,120 +145,110 @@ module.exports = function(options) {
 				},
 
 				copyDir: function( /*String*/ srcDir, /*String*/ destDir, /*RegExp?*/ regExpFilter, /*boolean?*/ onlyCopyNew) {
-					console.log("[copy dir], from: %s, to: %s", srcDir, destDir);
-					var copiedFiles = [];
-					for(var name in cache) {
-						if(cache[name].isBuffer()){
-							copiedFiles.push(cache[name].path);
-						}
-					}
 					//summary: copies files from srcDir to destDir using the regExpFilter to determine if the
 					//file should be copied. Returns a list file name strings of the destinations that were copied.
-					// regExpFilter = regExpFilter || /\w/;
+					regExpFilter = regExpFilter || /\w/;
 
-					// //Normalize th directory names, but keep front slashes.
-					// //path module on windows now returns backslashed paths.
-					// srcDir = frontSlash(path.normalize(srcDir));
-					// destDir = frontSlash(path.normalize(destDir));
+					//Normalize th directory names, but keep front slashes.
+					//path module on windows now returns backslashed paths.
+					srcDir = frontSlash(path.normalize(srcDir));
+					destDir = frontSlash(path.normalize(destDir));
 
-					// var fileNames = file.getFilteredFileList(srcDir, regExpFilter, true),
-					// 	copiedFiles = [],
-					// 	i, srcFileName, destFileName;
+					var fileNames = this.getFilteredFileList(srcDir, regExpFilter, true),
+						copiedFiles = [],
+						i, srcFileName, destFileName;
 
-					// for (i = 0; i < fileNames.length; i++) {
-					// 	srcFileName = fileNames[i];
-					// 	destFileName = srcFileName.replace(srcDir, destDir);
+					for (i = 0; i < fileNames.length; i++) {
+						srcFileName = fileNames[i];
+						destFileName = srcFileName.replace(srcDir, destDir);
 
-					// 	if (file.copyFile(srcFileName, destFileName, onlyCopyNew)) {
-					// 		copiedFiles.push(destFileName);
-					// 	}
-					// }
+						if (this.copyFile(srcFileName, destFileName, onlyCopyNew)) {
+							copiedFiles.push(destFileName);
+						}
+					}
 
-					// return copiedFiles.length ? copiedFiles : null; //Array or null
-					console.log(copiedFiles);
-					return copiedFiles;
+					return copiedFiles.length ? copiedFiles : null; //Array or null
 				},
 
 				copyFile: function( /*String*/ srcFileName, /*String*/ destFileName, /*boolean?*/ onlyCopyNew) {
-					console.log("[copy file]srcFileName: %s, destFileName: %s", srcFileName, destFileName);
-					return true;
 					//summary: copies srcFileName to destFileName. If onlyCopyNew is set, it only copies the file if
 					//srcFileName is newer than destFileName. Returns a boolean indicating if the copy occurred.
 					// var parentDir;
 
-					// //logger.trace("Src filename: " + srcFileName);
-					// //logger.trace("Dest filename: " + destFileName);
+					//logger.trace("Src filename: " + srcFileName);
+					//logger.trace("Dest filename: " + destFileName);
 
-					// //If onlyCopyNew is true, then compare dates and only copy if the src is newer
-					// //than dest.
-					// if (onlyCopyNew) {
-					// 	if (file.exists(destFileName) && fs.statSync(destFileName).mtime.getTime() >= fs.statSync(srcFileName).mtime.getTime()) {
-					// 		return false; //Boolean
-					// 	}
-					// }
+					//If onlyCopyNew is true, then compare dates and only copy if the src is newer
+					//than dest.
+					if (onlyCopyNew) {
+						if (this.exists(destFileName) && cache[destFileName].stat.mtime.getTime() >= cache[srcFileName].stat.mtime.getTime()) {
+							return false; //Boolean
+						}
+					}
 
-					// //Make sure destination dir exists.
+					//Make sure destination dir exists.
 					// parentDir = path.dirname(destFileName);
 					// if (!file.exists(parentDir)) {
 					// 	mkFullDir(parentDir);
 					// }
-
+		
 					// fs.writeFileSync(destFileName, fs.readFileSync(srcFileName, 'binary'), 'binary');
-
-					// return true; //Boolean
+					if(this.exists(srcFileName)) {
+						cache[destFileName] = cache[srcFileName].clone();
+						cache[destFileName].path = destFileName;
+						return true; //Boolean
+					}
 				},
 
 				/**
 				 * Renames a file. May fail if "to" already exists or is on another drive.
 				 */
 				renameFile: function(from, to) {
-					console.log("[renameFile] form: %s, to: %s", from, to);
-					return fs.renameSync(from, to);
+					if(this.exists(from)) {
+						cache[from].path = to;
+						return true;
+					}
 				},
 
 				/**
 				 * Reads a *text* file.
 				 */
 				readFile: function( /*String*/ path, /*String?*/ encoding) {
-					console.log("[read file]path: %s, encoding: %s", path, encoding);
-					// if (encoding === 'utf-8') {
-					// 	encoding = 'utf8';
-					// }
-					// if (!encoding) {
-					// 	encoding = 'utf8';
-					// }
+					if (encoding === 'utf-8') {
+						encoding = 'utf8';
+					}
+					if (!encoding) {
+						encoding = 'utf8';
+					}
 
 					// var text = fs.readFileSync(path, encoding);
+					var text = cache[path].contents + "";
 
-					// //Hmm, would not expect to get A BOM, but it seems to happen,
-					// //remove it just in case.
-					// if (text.indexOf('\uFEFF') === 0) {
-					// 	text = text.substring(1, text.length);
-					// }
+					//Hmm, would not expect to get A BOM, but it seems to happen,
+					//remove it just in case.
+					if (text.indexOf('\uFEFF') === 0) {
+						text = text.substring(1, text.length);
+					}
 
-					// return text;
-					return "";
+					return text;
 				},
 
 				readFileAsync: function(path, encoding) {
-					console.log("[readFileAsync]path: %s, encodeing: %s", path, encodeing);
-					// var d = prim();
-					// try {
-					// 	d.resolve(file.readFile(path, encoding));
-					// } catch (e) {
-					// 	d.reject(e);
-					// }
-					// return d.promise;
+					var d = prim();
+					try {
+						d.resolve(this.readFile(path, encoding));
+					} catch (e) {
+						d.reject(e);
+					}
+					return d.promise;
 				},
 
 				saveUtf8File: function( /*String*/ fileName, /*String*/ fileContents) {
-					console.log("[save utf-8 file]");
 					//summary: saves a *text* file using UTF-8 encoding.
-					file.saveFile(fileName, fileContents, "utf8");
+					this.saveFile(fileName, fileContents, "utf8");
 				},
 
 				saveFile: function( /*String*/ fileName, /*String*/ fileContents, /*String?*/ encoding) {
-					console.log("[save file]");
 					//summary: saves a *text* file.
 					var parentDir;
 
@@ -283,16 +260,16 @@ module.exports = function(options) {
 					}
 
 					//Make sure destination directories exist.
-					parentDir = path.dirname(fileName);
-					if (!file.exists(parentDir)) {
-						mkFullDir(parentDir);
-					}
+					// parentDir = path.dirname(fileName);
+					// if (!file.exists(parentDir)) {
+					// 	mkFullDir(parentDir);
+					// }
 
-					fs.writeFileSync(fileName, fileContents, encoding);
+					// fs.writeFileSync(fileName, fileContents, encoding);
+					cache[filename].contents = fileContents; 
 				},
 
 				deleteFile: function( /*String*/ fileName) {
-					console.log("[deleteFile] filename: %s", fileName);
 					//summary: deletes a file or directory if it exists.
 					var files, i, stat;
 					if (file.exists(fileName)) {
@@ -314,7 +291,6 @@ module.exports = function(options) {
 				 * Deletes any empty directories under the given directory.
 				 */
 				deleteEmptyDirs: function(startDir) {
-					console.log("[deleteEmptyDirs] startDir: %s", startDir);
 					var dirFileArray, i, fileName, filePath, stat;
 
 					if (file.exists(startDir)) {
@@ -338,6 +314,7 @@ module.exports = function(options) {
 		});
 
 		requirejs.optimize(options, function() {
+			console.log("arguments");
 			callback()
 		}, function() {})
 	}
