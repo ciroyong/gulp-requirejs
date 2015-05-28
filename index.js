@@ -11,11 +11,11 @@ module.exports = function(options) {
 	path = require("path");
 	cache = {};
 	op = Object.prototype;
-    hasOwn = op.hasOwnProperty;
+	hasOwn = op.hasOwnProperty;
 
-    function hasProp(obj, prop) {
-        return hasOwn.call(obj, prop);
-    }
+	function hasProp(obj, prop) {
+		return hasOwn.call(obj, prop);
+	}
 
 	function frontSlash(sPath) {
 		return sPath.replace(/\\/g, '/');
@@ -33,7 +33,7 @@ module.exports = function(options) {
 		// } catch (e) {
 		// 	return false;
 		// }
-		if(sPath === frontSlash(path.normalize(options.baseUrl))) {
+		if (sPath === frontSlash(path.normalize(options.baseUrl))) {
 			return true;
 		}
 
@@ -122,8 +122,8 @@ module.exports = function(options) {
 					regExpInclude = regExpFilters.include || regExpFilters;
 					regExpExclude = regExpFilters.exclude || null;
 
-					for(name in cache) {
-						if(cache[name].stat.isFile()) {
+					for (name in cache) {
+						if (cache[name].stat.isFile()) {
 							ok = true;
 
 							if (regExpInclude) {
@@ -167,6 +167,8 @@ module.exports = function(options) {
 						}
 					}
 
+					// console.log("[dump]copyDir, srcDir: %s, destDir: %s, copiedFiles:", srcDir, destDir, copiedFiles);
+
 					return copiedFiles.length ? copiedFiles : null; //Array or null
 				},
 
@@ -191,9 +193,9 @@ module.exports = function(options) {
 					// if (!file.exists(parentDir)) {
 					// 	mkFullDir(parentDir);
 					// }
-		
+
 					// fs.writeFileSync(destFileName, fs.readFileSync(srcFileName, 'binary'), 'binary');
-					if(this.exists(srcFileName)) {
+					if (this.exists(srcFileName)) {
 						cache[destFileName] = cache[srcFileName].clone();
 						cache[destFileName].path = destFileName;
 						return true; //Boolean
@@ -204,8 +206,11 @@ module.exports = function(options) {
 				 * Renames a file. May fail if "to" already exists or is on another drive.
 				 */
 				renameFile: function(from, to) {
-					if(this.exists(from)) {
-						cache[from].path = to;
+					if (this.exists(from)) {
+						cache[to] = cache[from];
+						cache[to].path = to;
+						cache[from] = null;
+						delete cache[from];
 						return true;
 					}
 				},
@@ -230,6 +235,8 @@ module.exports = function(options) {
 						text = text.substring(1, text.length);
 					}
 
+					// console.log("[watch]readFile, path: %s, text: %s", path, text);
+
 					return text;
 				},
 
@@ -244,14 +251,14 @@ module.exports = function(options) {
 				},
 
 				saveUtf8File: function( /*String*/ fileName, /*String*/ fileContents) {
+					// console.log("[watch]saveUtf8File, fileName: %s, fileContents: %s", fileName, fileContents);
 					//summary: saves a *text* file using UTF-8 encoding.
 					this.saveFile(fileName, fileContents, "utf8");
 				},
 
 				saveFile: function( /*String*/ fileName, /*String*/ fileContents, /*String?*/ encoding) {
+					var targetFileName, file;
 					//summary: saves a *text* file.
-					var parentDir;
-
 					if (encoding === 'utf-8') {
 						encoding = 'utf8';
 					}
@@ -266,22 +273,42 @@ module.exports = function(options) {
 					// }
 
 					// fs.writeFileSync(fileName, fileContents, encoding);
-					cache[filename].contents = fileContents; 
+
+					targetFileName = fileName.replace(/\-temp$/, "");
+
+					if(this.exists(targetFileName) && targetFileName != fileName) {
+						file = cache[targetFileName].clone({contents: false, path: false});
+					} else {
+						file = new gutil.File({
+							stat: {
+								isFile: function() {return true},
+								isDirectory: function() {return false}
+							}
+						});
+					}
+
+					file.path = fileName;
+					file.contents = new Buffer(fileContents);
+					cache[fileName] = file;
 				},
 
 				deleteFile: function( /*String*/ fileName) {
 					//summary: deletes a file or directory if it exists.
-					var files, i, stat;
-					if (file.exists(fileName)) {
-						stat = fs.lstatSync(fileName);
+					var i, stat;
+					if (this.exists(fileName)) {
+						stat = cache[fileName].stat;
 						if (stat.isDirectory()) {
-							files = fs.readdirSync(fileName);
-							for (i = 0; i < files.length; i++) {
-								this.deleteFile(path.join(fileName, files[i]));
+							for (i in cache) {
+								if (i.indexOf(fileName) > -1) {
+									cache[i] = null;
+									delete cache[i];
+								}
 							}
-							fs.rmdirSync(fileName);
 						} else {
-							fs.unlinkSync(fileName);
+							if (hasProp(cache, fileName)) {
+								cache[fileName] = null;
+								delete cache[fileName];
+							}
 						}
 					}
 				},
@@ -291,32 +318,62 @@ module.exports = function(options) {
 				 * Deletes any empty directories under the given directory.
 				 */
 				deleteEmptyDirs: function(startDir) {
-					var dirFileArray, i, fileName, filePath, stat;
-
-					if (file.exists(startDir)) {
-						dirFileArray = fs.readdirSync(startDir);
-						for (i = 0; i < dirFileArray.length; i++) {
-							fileName = dirFileArray[i];
-							filePath = path.join(startDir, fileName);
-							stat = fs.lstatSync(filePath);
-							if (stat.isDirectory()) {
-								file.deleteEmptyDirs(filePath);
-							}
+					var i, j, empty, stat;
+					for (i in cache) {
+						empty = true;
+						if (i.indexOf(options.baseUrl) > -1) {
+							this.deleteFile(i);
+							continue;
 						}
 
-						//If directory is now empty, remove it.
-						if (fs.readdirSync(startDir).length === 0) {
-							file.deleteFile(startDir);
+						stat = cache[i].stat;
+
+						if (stat.isDirectory()) {
+							for (j in cache) {
+								if (j.indexOf(i) > -1) {
+									empty = false;
+									break;
+								}
+							}
+
+							if (empty) {
+								this.deleteFile(i);
+							}
 						}
 					}
 				}
 			}
 		});
 
-		requirejs.optimize(options, function() {
-			console.log("arguments");
+		var _this = this;
+
+		requirejs.optimize(options, function(buildResponse) {
+			var i;
+			// var i, module, name, _path, file, fileName, dir;
+
+			// dir = options.dir;
+
+			// for(i in options.modules) {
+			// 	module = options.modules[i];
+			// 	name = module.name;
+			// 	_path = module._buildPath;
+
+			// 	if(hasProp(cache, _path)) {
+			// 		file = cache[_path];
+			// 		file.path = dir + name + ".js";
+
+			// 		_this.push(file);
+			// 	}
+			// }
+
+			for(i in cache) {
+				_this.push(cache[i])
+			}
+
 			callback()
-		}, function() {})
+		}, function(err) {
+			console.log("[watch]build error: ", err);
+		})
 	}
 
 	return through.obj(start, end);
