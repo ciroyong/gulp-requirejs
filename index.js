@@ -78,7 +78,6 @@ module.exports = function(options) {
 				},
 
 				exists: function(fileName) {
-					console.log("[watch]file.exists, fileName: %s", fileName);
 					return exists(fileName);
 				},
 
