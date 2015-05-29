@@ -63,7 +63,7 @@ module.exports = function(options) {
 	}
 
 	function start(file, encoding, callback) {
-		file.path = path.resolve(options.baseUrl, file.relative);
+		file.path = frontSlash(path.normalize(path.resolve(options.baseUrl, file.relative)));
 		cache[file.path] = file;
 		callback();
 	}
@@ -78,6 +78,7 @@ module.exports = function(options) {
 				},
 
 				exists: function(fileName) {
+					console.log("[watch]file.exists, fileName: %s", fileName);
 					return exists(fileName);
 				},
 
