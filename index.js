@@ -1,13 +1,13 @@
 module.exports = function(options) {
 	'use strict';
 
-	var requirejs, path, through, gutil, cache, isWindows, windowsDriveRegExp, op, hasOwn, hasProp;
+	var requirejs, path, through, cache, isWindows, windowsDriveRegExp, op, hasOwn, hasProp;
 
 	isWindows = process.platform === 'win32';
 	windowsDriveRegExp = /^[a-zA-Z]\:\/$/;
 	requirejs = require("requirejs");
 	through = require("through2");
-	gutil = require("gulp-util");
+	Vinyl = require("vinyl");
 	path = require("path");
 	cache = {};
 	op = Object.prototype;
@@ -279,7 +279,7 @@ module.exports = function(options) {
 					if(this.exists(targetFileName) && targetFileName != fileName) {
 						file = cache[targetFileName].clone({contents: false, path: false});
 					} else {
-						file = new gutil.File({
+						file = new vinyl({
 							stat: {
 								isFile: function() {return true},
 								isDirectory: function() {return false}
