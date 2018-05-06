@@ -1,10 +1,11 @@
 module.exports = function(options) {
 	'use strict';
 
-	var requirejs, path, through, cache, isWindows, windowsDriveRegExp, op, hasOwn, hasProp;
+	var requirejs, Vinyl, path, through, cache, isWindows, dukeWindowsDriveRegExp, windowsDriveRegExp, op, hasOwn, hasProp;
 
 	isWindows = process.platform === 'win32';
-	windowsDriveRegExp = /^[a-zA-Z]\:\/$/;
+	windowsDriveRegExp = /^[a-zA-Z]\:\\/;
+	dukeWindowsDriveRegExp = /^[a-zA-Z]\:\//;
 	requirejs = require("requirejs");
 	through = require("through2");
 	Vinyl = require("vinyl");
@@ -18,13 +19,18 @@ module.exports = function(options) {
 	}
 
 	function frontSlash(sPath) {
-		return sPath.replace(/\\/g, '/');
+		if (isWindows && dukeWindowsDriveRegExp.test(sPath)) {
+			// console.log("replace: %s", sPath);
+			sPath = sPath.replace(/\//g, '\\');
+			// console.log("replace: %s", sPath);
+		}
+		return sPath;
 	}
 
 	function exists(sPath) {
-		// if (isWindows && path.charAt(path.length - 1) === '/' &&
-		// 	path.charAt(path.length - 2) !== ':') {
-		// 	path = path.substring(0, path.length - 1);
+		// if (isWindows && sPath.charAt(sPath.length - 1) === '/' &&
+		// 	sPath.charAt(sPath.length - 2) !== ':') {
+		// 	sPath = sPath.substring(0, sPath.length - 1);
 		// }
 
 		// try {
@@ -33,11 +39,13 @@ module.exports = function(options) {
 		// } catch (e) {
 		// 	return false;
 		// }
+		// console.log("exists: %s, %b ", sPath, hasProp(cache, frontSlash(sPath)));
+
 		if (sPath === frontSlash(path.normalize(options.baseUrl))) {
 			return true;
 		}
 
-		return hasProp(cache, sPath);
+		return hasProp(cache, frontSlash(sPath));
 	}
 
 	function mkDir(dir) {
@@ -63,8 +71,14 @@ module.exports = function(options) {
 	}
 
 	function start(file, encoding, callback) {
-		file.path = frontSlash(path.normalize(path.resolve(options.baseUrl, file.relative)));
-		cache[file.path] = file;
+		var resovledPath = path.resolve(options.baseUrl, file.relative);
+		// console.log("resovledPath: %s", resovledPath);
+		var normalizedPath = path.normalize(resovledPath);
+		// console.log("normalizedPath: %s", normalizedPath);
+		var frontSlashedPath = frontSlash(normalizedPath);
+		// console.log("frontSlashedPath: %s", frontSlashedPath);
+		file.path = frontSlashedPath;
+		cache[frontSlashedPath] = file;
 		callback();
 	}
 
@@ -196,6 +210,9 @@ module.exports = function(options) {
 
 					// fs.writeFileSync(destFileName, fs.readFileSync(srcFileName, 'binary'), 'binary');
 					if (this.exists(srcFileName)) {
+						srcFileName = frontSlash(srcFileName);
+						destFileName = frontSlash(destFileName);
+
 						cache[destFileName] = cache[srcFileName].clone();
 						cache[destFileName].path = destFileName;
 						return true; //Boolean
@@ -206,6 +223,8 @@ module.exports = function(options) {
 				 * Renames a file. May fail if "to" already exists or is on another drive.
 				 */
 				renameFile: function(from, to) {
+					from = frontSlash(from);
+					to = frontSlash(to);
 					if (this.exists(from)) {
 						cache[to] = cache[from];
 						cache[to].path = to;
@@ -219,6 +238,8 @@ module.exports = function(options) {
 				 * Reads a *text* file.
 				 */
 				readFile: function( /*String*/ path, /*String?*/ encoding) {
+					// console.log("read file path: %s", path);
+					path = frontSlash(path);
 					if (encoding === 'utf-8') {
 						encoding = 'utf8';
 					}
@@ -228,6 +249,10 @@ module.exports = function(options) {
 
 					// var text = fs.readFileSync(path, encoding);
 					var text = cache[path].contents + "";
+
+					// if (path.indexOf("jquery") > -1) {
+					// 	console.log("read jquery path: %s, contents: %s", path, text);
+					// }
 
 					//Hmm, would not expect to get A BOM, but it seems to happen,
 					//remove it just in case.
@@ -274,12 +299,13 @@ module.exports = function(options) {
 
 					// fs.writeFileSync(fileName, fileContents, encoding);
 
+					fileName = frontSlash(fileName);
 					targetFileName = fileName.replace(/\-temp$/, "");
 
 					if(this.exists(targetFileName) && targetFileName != fileName) {
 						file = cache[targetFileName].clone({contents: false, path: false});
 					} else {
-						file = new vinyl({
+						file = new Vinyl({
 							stat: {
 								isFile: function() {return true},
 								isDirectory: function() {return false}
@@ -288,12 +314,14 @@ module.exports = function(options) {
 					}
 
 					file.path = fileName;
+					// console.log("when save file: %s", fileName);
 					file.contents = new Buffer(fileContents);
 					cache[fileName] = file;
 				},
 
 				deleteFile: function( /*String*/ fileName) {
 					//summary: deletes a file or directory if it exists.
+					fileName = frontSlash(fileName);
 					var i, stat;
 					if (this.exists(fileName)) {
 						stat = cache[fileName].stat;
@@ -346,7 +374,6 @@ module.exports = function(options) {
 		});
 
 		var _this = this;
-
 		requirejs.optimize(options, function(buildResponse) {
 			var i;
 			// var i, module, name, _path, file, fileName, dir;
