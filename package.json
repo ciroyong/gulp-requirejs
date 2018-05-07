@@ -1,7 +1,7 @@
 {
     "name": "gulp-requirejs-stream",
     "description": "A stream-friendly AMD(requirejs) optimizer",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "repository": "ciroyong/gulp-requirejs-stream",
     "author": "ciroyong <ciroyong@gmail.com> (http://oldfe.com/)",
     "files": [

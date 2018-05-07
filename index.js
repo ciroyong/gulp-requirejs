@@ -20,27 +20,12 @@ module.exports = function(options) {
 
 	function frontSlash(sPath) {
 		if (isWindows && dukeWindowsDriveRegExp.test(sPath)) {
-			// console.log("replace: %s", sPath);
 			sPath = sPath.replace(/\//g, '\\');
-			// console.log("replace: %s", sPath);
 		}
 		return sPath;
 	}
 
 	function exists(sPath) {
-		// if (isWindows && sPath.charAt(sPath.length - 1) === '/' &&
-		// 	sPath.charAt(sPath.length - 2) !== ':') {
-		// 	sPath = sPath.substring(0, sPath.length - 1);
-		// }
-
-		// try {
-		// 	fs.statSync(path);
-		// 	return true;
-		// } catch (e) {
-		// 	return false;
-		// }
-		// console.log("exists: %s, %b ", sPath, hasProp(cache, frontSlash(sPath)));
-
 		if (sPath === frontSlash(path.normalize(options.baseUrl))) {
 			return true;
 		}
@@ -72,11 +57,8 @@ module.exports = function(options) {
 
 	function start(file, encoding, callback) {
 		var resovledPath = path.resolve(options.baseUrl, file.relative);
-		// console.log("resovledPath: %s", resovledPath);
 		var normalizedPath = path.normalize(resovledPath);
-		// console.log("normalizedPath: %s", normalizedPath);
 		var frontSlashedPath = frontSlash(normalizedPath);
-		// console.log("frontSlashedPath: %s", frontSlashedPath);
 		file.path = frontSlashedPath;
 		cache[frontSlashedPath] = file;
 		callback();
@@ -181,7 +163,6 @@ module.exports = function(options) {
 						}
 					}
 
-					// console.log("[dump]copyDir, srcDir: %s, destDir: %s, copiedFiles:", srcDir, destDir, copiedFiles);
 
 					return copiedFiles.length ? copiedFiles : null; //Array or null
 				},
@@ -201,12 +182,6 @@ module.exports = function(options) {
 							return false; //Boolean
 						}
 					}
-
-					//Make sure destination dir exists.
-					// parentDir = path.dirname(destFileName);
-					// if (!file.exists(parentDir)) {
-					// 	mkFullDir(parentDir);
-					// }
 
 					// fs.writeFileSync(destFileName, fs.readFileSync(srcFileName, 'binary'), 'binary');
 					if (this.exists(srcFileName)) {
@@ -238,7 +213,6 @@ module.exports = function(options) {
 				 * Reads a *text* file.
 				 */
 				readFile: function( /*String*/ path, /*String?*/ encoding) {
-					// console.log("read file path: %s", path);
 					path = frontSlash(path);
 					if (encoding === 'utf-8') {
 						encoding = 'utf8';
@@ -247,20 +221,13 @@ module.exports = function(options) {
 						encoding = 'utf8';
 					}
 
-					// var text = fs.readFileSync(path, encoding);
 					var text = cache[path].contents + "";
-
-					// if (path.indexOf("jquery") > -1) {
-					// 	console.log("read jquery path: %s, contents: %s", path, text);
-					// }
-
 					//Hmm, would not expect to get A BOM, but it seems to happen,
 					//remove it just in case.
 					if (text.indexOf('\uFEFF') === 0) {
 						text = text.substring(1, text.length);
 					}
 
-					// console.log("[watch]readFile, path: %s, text: %s", path, text);
 
 					return text;
 				},
@@ -276,7 +243,6 @@ module.exports = function(options) {
 				},
 
 				saveUtf8File: function( /*String*/ fileName, /*String*/ fileContents) {
-					// console.log("[watch]saveUtf8File, fileName: %s, fileContents: %s", fileName, fileContents);
 					//summary: saves a *text* file using UTF-8 encoding.
 					this.saveFile(fileName, fileContents, "utf8");
 				},
@@ -290,14 +256,6 @@ module.exports = function(options) {
 					if (!encoding) {
 						encoding = 'utf8';
 					}
-
-					//Make sure destination directories exist.
-					// parentDir = path.dirname(fileName);
-					// if (!file.exists(parentDir)) {
-					// 	mkFullDir(parentDir);
-					// }
-
-					// fs.writeFileSync(fileName, fileContents, encoding);
 
 					fileName = frontSlash(fileName);
 					targetFileName = fileName.replace(/\-temp$/, "");
@@ -314,7 +272,6 @@ module.exports = function(options) {
 					}
 
 					file.path = fileName;
-					// console.log("when save file: %s", fileName);
 					file.contents = new Buffer(fileContents);
 					cache[fileName] = file;
 				},
@@ -375,24 +332,6 @@ module.exports = function(options) {
 
 		var _this = this;
 		requirejs.optimize(options, function(buildResponse) {
-			var i;
-			// var i, module, name, _path, file, fileName, dir;
-
-			// dir = options.dir;
-
-			// for(i in options.modules) {
-			// 	module = options.modules[i];
-			// 	name = module.name;
-			// 	_path = module._buildPath;
-
-			// 	if(hasProp(cache, _path)) {
-			// 		file = cache[_path];
-			// 		file.path = dir + name + ".js";
-
-			// 		_this.push(file);
-			// 	}
-			// }
-
 			for(i in cache) {
 				_this.push(cache[i])
 			}
