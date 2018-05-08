@@ -331,8 +331,9 @@ module.exports = function(options) {
 		});
 
 		var _this = this;
+		console.log("start optimizing ... ");
 		requirejs.optimize(options, function(buildResponse) {
-			for(i in cache) {
+			for(var i in cache) {
 				_this.push(cache[i])
 			}
 
